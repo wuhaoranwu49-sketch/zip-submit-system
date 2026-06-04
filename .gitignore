@@ -1,3 +1,7 @@
-node_modules/ uploads/ submissions.json .env .DS_Store .vercel 
-submissions.db 
-nede.db
+node_modules/
+uploads/
+submissions.json
+submissions.db
+.env
+.DS_Store
+.vercel/
