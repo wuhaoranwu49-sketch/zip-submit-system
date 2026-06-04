@@ -203,7 +203,6 @@
       empty.style.display = 'none';
 
       tbody.innerHTML = filtered.map((s, i) => {
-        const origIndex = allData.indexOf(s);
         return `<tr>
           <td>${i + 1}</td>
           <td><span class="badge">${s.className}</span></td>
@@ -214,7 +213,7 @@
           <td>${s.submitTime}</td>
           <td>
             <button class="btn btn-download" onclick="download('${s.savedName}')">下载</button>
-            <button class="btn btn-delete" onclick="del(${origIndex})">删除</button>
+            <button class="btn btn-delete" onclick="del('${s._id}')">删除</button>
           </td>
         </tr>`;
       }).join('');
@@ -224,9 +223,9 @@
       window.open('/api/download/' + encodeURIComponent(filename));
     }
 
-    async function del(index) {
+    async function del(id) {
       if (!confirm('确定删除该提交记录？文件也将被删除。')) return;
-      const res = await fetch(`/api/submissions/${index}`, { method: 'DELETE' });
+      const res = await fetch(`/api/submissions/${id}`, { method: 'DELETE' });
       if (res.ok) {
         await loadData();
       } else {

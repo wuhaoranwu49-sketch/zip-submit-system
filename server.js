@@ -1,16 +1,17 @@
-﻿const express = require('express');
+const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const Datastore = require('nedb-promises');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 确保上传目录存在
+// 使用 neDB 数据库替代 JSON 文件（数据持久化）
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
-const DATA_FILE = path.join(__dirname, 'submissions.json');
+const db = Datastore.create({ filename: path.join(__dirname, 'submissions.db'), autoload: true });
+
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
-if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, '[]', 'utf-8');
 
 // 配置 multer 存储
 const storage = multer.diskStorage({
@@ -34,7 +35,7 @@ const upload = multer({
       cb(new Error('仅支持压缩包文件（zip/rar/7z/tar/gz）'));
     }
   },
-  limits: { fileSize: 500 * 1024 * 1024 } // 500MB
+  limits: { fileSize: 500 * 1024 * 1024 }
 });
 
 // 静态文件
@@ -43,19 +44,16 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 // 提交接口
-app.post('/api/submit', upload.single('file'), (req, res) => {
+app.post('/api/submit', upload.single('file'), async (req, res) => {
   try {
     const { className, name, studentId } = req.body;
     if (!className || !name || !studentId || !req.file) {
-      // 删除已上传的文件
       if (req.file) fs.unlinkSync(req.file.path);
       return res.status(400).json({ success: false, message: '请填写完整信息并上传文件' });
     }
 
-    const submissions = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
-
-    // 检查是否重复提交（同一学号）
-    const existIndex = submissions.findIndex(s => s.studentId === studentId);
+    // 查找是否已有该学号记录
+    const existing = await db.findOne({ studentId });
     const record = {
       className,
       name,
@@ -66,17 +64,16 @@ app.post('/api/submit', upload.single('file'), (req, res) => {
       submitTime: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
     };
 
-    if (existIndex >= 0) {
+    if (existing) {
       // 删除旧文件
-      const oldFile = path.join(UPLOAD_DIR, submissions[existIndex].savedName);
+      const oldFile = path.join(UPLOAD_DIR, existing.savedName);
       if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
-      submissions[existIndex] = record;
+      await db.update({ studentId }, record);
     } else {
-      submissions.push(record);
+      await db.insert(record);
     }
 
-    fs.writeFileSync(DATA_FILE, JSON.stringify(submissions, null, 2), 'utf-8');
-    res.json({ success: true, message: existIndex >= 0 ? '已更新提交' : '提交成功' });
+    res.json({ success: true, message: existing ? '已更新提交' : '提交成功' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: '服务器错误' });
@@ -84,23 +81,24 @@ app.post('/api/submit', upload.single('file'), (req, res) => {
 });
 
 // 获取所有提交记录
-app.get('/api/submissions', (req, res) => {
-  const submissions = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+app.get('/api/submissions', async (req, res) => {
+  const submissions = await db.find({}).sort({ submitTime: -1 });
   res.json(submissions);
 });
 
-// 删除提交记录
-app.delete('/api/submissions/:index', (req, res) => {
-  const submissions = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
-  const idx = parseInt(req.params.index);
-  if (idx >= 0 && idx < submissions.length) {
-    const oldFile = path.join(UPLOAD_DIR, submissions[idx].savedName);
+// 删除提交记录（使用 _id）
+app.delete('/api/submissions/:id', async (req, res) => {
+  try {
+    const record = await db.findOne({ _id: req.params.id });
+    if (!record) {
+      return res.status(400).json({ success: false, message: '记录不存在' });
+    }
+    const oldFile = path.join(UPLOAD_DIR, record.savedName);
     if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
-    submissions.splice(idx, 1);
-    fs.writeFileSync(DATA_FILE, JSON.stringify(submissions, null, 2), 'utf-8');
+    await db.remove({ _id: req.params.id });
     res.json({ success: true });
-  } else {
-    res.status(400).json({ success: false, message: '记录不存在' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: '服务器错误' });
   }
 });
 
