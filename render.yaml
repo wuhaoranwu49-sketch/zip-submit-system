@@ -1,0 +1,9 @@
+﻿services:
+  - type: web
+    name: zip-submit-system
+    env: node
+    buildCommand: npm install --production
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
