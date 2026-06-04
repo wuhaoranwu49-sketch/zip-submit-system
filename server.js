@@ -128,7 +128,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, message: '服务器错误' });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`压缩包提交系统已启动: http://localhost:${PORT}`);
   console.log(`管理页面: http://localhost:${PORT}/admin.html`);
 });
