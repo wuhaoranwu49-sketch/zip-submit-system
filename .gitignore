@@ -1,7 +1,10 @@
-node_modules/
+﻿node_modules/
 uploads/
 submissions.json
 submissions.db
 .env
 .DS_Store
 .vercel/
+
+*.bak
+fix_bucket.js
